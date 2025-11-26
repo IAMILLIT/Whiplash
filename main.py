@@ -1,12 +1,11 @@
 # app.py
-# Streamlit 앱: 개인 맞춤 영양식 설계 데모
+# Streamlit 앱: 개인 맞춤 영양식 설계 데모 (download_button 오류 수정 반영)
 # 외부 라이브러리 없음(표준 라이브러리 + streamlit만 사용).
 # 사용법: streamlit run app.py
 
 import streamlit as st
 import math
 import random
-import io
 import json
 from datetime import date
 
@@ -55,57 +54,46 @@ def calorie_target(tdee, goal):
     else:
         return int(tdee)
 
-def macro_targets(calories, protein_pref="보통"):
-    # 단백질 목표: 체중(kg) * factor (1.2~2.0) depending preference
-    # 탄수화물: 나머지 열량에서 지방(25%)과 단백질(4kcal/g) 제외
-    # 지방: 총열량의 25% (대략)
+def macro_targets(calories, weight_kg, protein_pref="보통"):
+    # 단백질 목표: 체중(kg) * factor (1.0~1.8) depending preference
     fat_cal = calories * 0.25
     fat_g = int(fat_cal / 9)
     if protein_pref == "높게":
-        prot_g = int(user_weight_kg * 1.8)
+        prot_g = int(weight_kg * 1.8)
     elif protein_pref == "낮게":
-        prot_g = int(user_weight_kg * 1.0)
+        prot_g = int(weight_kg * 1.0)
     else:
-        prot_g = int(user_weight_kg * 1.4)
+        prot_g = int(weight_kg * 1.4)
     prot_cal = prot_g * 4
     carb_cal = max(0, calories - prot_cal - fat_cal)
     carb_g = int(carb_cal / 4)
     return {"calories": calories, "protein_g": prot_g, "carb_g": carb_g, "fat_g": fat_g}
 
 def score_recipe_for_user(recipe, prefs):
-    # 높은 점수: 선호 포함, 알레르기 제외, 비선호 제외, 비타민 채움 고려
     score = 0
-    # 선호 음식 포함시 보너스
     for p in prefs["likes"]:
         if p and p.lower() in recipe["name"].lower():
             score += 15
-    # 알레르기/싫어함 있으면 큰 패널티
     for a in prefs["allergies"]:
         if a and a.lower() in recipe["ingredients_text"].lower():
-            return -999  # 완전 제외
+            return -999
     for d in prefs["dislikes"]:
         if d and d.lower() in recipe["ingredients_text"].lower():
             score -= 20
-    # 비타민 포함 여부
     for vit in prefs["vitamins_wanted"]:
         if vit in recipe["vitamins"]:
             score += 5
-    # 칼로리 적합성(너무 크면 감점)
     if recipe["calories"] <= prefs["calories_per_meal"] * 1.2:
         score += 8
-    # 랜덤 소량 가산으로 다양성
     score += random.uniform(0,4)
     return score
 
 def pick_meals_for_day(recipes_db, prefs):
-    # 세 끼 + 1-2 간식을 추천 (간단한 탐색: greedy)
     chosen = {"아침": None, "점심": None, "저녁": None, "간식": []}
     remaining_cal = prefs["daily_calories"]
-    # 각 끼 당 목표칼로리(비율)
     distribution = {"아침": 0.25, "점심": 0.35, "저녁": 0.30}
     for meal, frac in distribution.items():
         prefs["calories_per_meal"] = int(prefs["daily_calories"] * frac)
-        # 후보 필터링
         candidates = []
         for r in recipes_db:
             s = score_recipe_for_user(r, prefs)
@@ -115,12 +103,10 @@ def pick_meals_for_day(recipes_db, prefs):
             chosen[meal] = None
             continue
         candidates.sort(key=lambda x: x[0], reverse=True)
-        # 상위 후보 중 하나 선택(다양성 위해 약간 무작위)
         top_candidates = [c for c in candidates if c[0] >= candidates[0][0] - 6]
         sel = random.choice(top_candidates)[1]
         chosen[meal] = sel
         remaining_cal -= sel["calories"]
-    # 간식: 남은 칼로리에서 한두개 고르기
     snack_pool = [r for r in recipes_db if r["type"] == "간식"]
     snacks = []
     snack_budget = max(150, int(prefs["daily_calories"] * 0.10))
@@ -135,7 +121,6 @@ def pick_meals_for_day(recipes_db, prefs):
     return chosen
 
 # ---------- 간단한 '레시피 데이터베이스' (데모용) ----------
-# 각 항목은 name, type, calories, protein_g, carb_g, fat_g, vitamins(list), ingredients_text
 RECIPES = [
     {"name":"그릭 요거트 볼 (과일, 견과)", "type":"아침", "calories":380, "protein_g":20, "carb_g":45, "fat_g":12,
      "vitamins":["B","C"], "ingredients_text":"요거트, 블루베리, 바나나, 아몬드, 꿀"},
@@ -191,7 +176,6 @@ with st.container():
         meal_style = st.selectbox("끼니 스타일 선호", ("가벼운 식사", "포만감 있는 식사", "단백질 중심", "채소 중심"))
     st.markdown('</div>', unsafe_allow_html=True)
 
-# parse lists
 likes = veg_pref
 allergies_list = [x.strip() for x in allergies.split(",") if x.strip()]
 dislikes_list = [x.strip() for x in dislikes_text.split(",") if x.strip()]
@@ -200,7 +184,7 @@ dislikes_list = [x.strip() for x in dislikes_text.split(",") if x.strip()]
 user_bmr = calc_bmr(sex, user_weight_kg, user_height_cm, age)
 tdee = int(user_bmr * activity_multiplier(activity))
 daily_cal = calorie_target(tdee, goal)
-macros = macro_targets(daily_cal, protein_pref)
+macros = macro_targets(daily_cal, user_weight_kg, protein_pref)
 
 # Sidebar summary
 with st.sidebar:
@@ -224,7 +208,7 @@ prefs = {
     "dislikes": [d.lower() for d in dislikes_list],
     "vitamins_wanted": vit_wanted,
     "daily_calories": daily_cal,
-    "calories_per_meal": int(daily_cal * 0.3),  # temp, will be set in pick_meals
+    "calories_per_meal": int(daily_cal * 0.3),
 }
 
 st.header("3) 맞춤 식단 추천 👩‍⚕️🍽️")
@@ -235,7 +219,6 @@ if st.button("추천 식단 생성 🔍"):
     st.session_state["last_plan"] = plan
     st.success("추천 식단이 생성되었습니다. 아래를 확인하십시오. ✅")
 
-# Show if exists
 plan = st.session_state.get("last_plan", None)
 if plan:
     col_a, col_b = st.columns([2,1])
@@ -259,7 +242,6 @@ if plan:
             st.info("추천 간식이 없습니다.")
     with col_b:
         st.markdown("### 오늘 목표와의 차이")
-        # Sum macros
         tot_cals = 0; tot_prot=0; tot_carb=0; tot_fat=0
         for m in ["아침","점심","저녁"]:
             it = plan.get(m)
@@ -271,7 +253,6 @@ if plan:
         st.metric("단백질 (g)", f"{tot_prot} g", delta=f"{tot_prot - macros['protein_g']:+} g")
         st.metric("탄수화물 (g)", f"{tot_carb} g", delta=f"{tot_carb - macros['carb_g']:+} g")
         st.metric("지방 (g)", f"{tot_fat} g", delta=f"{tot_fat - macros['fat_g']:+} g")
-        # Progress bars
         st.write("진행률(목표 대비)")
         st.progress(min(1.0, tot_prot / max(1, macros['protein_g'])))
         st.progress(min(1.0, tot_carb / max(1, macros['carb_g'])))
@@ -285,16 +266,15 @@ if plan:
         if tot_fat < macros["fat_g"]:
             st.info("건강한 지방(아보카도, 견과, 올리브유)를 소량 추가하면 균형이 좋아집니다. 🥑")
 
-    # 다운로드(텍스트)
-    export_text = {
+    # ======= 여기서 오류가 나던 부분을 수정했습니다 =======
+    export_obj = {
         "user": {"name": user_name, "age": age, "height_cm": user_height_cm, "weight_kg": user_weight_kg, "goal": goal},
         "daily_targets": macros,
         "plan": plan
     }
-    buf = io.StringIO()
-    buf.write(json.dumps(export_text, ensure_ascii=False, indent=2))
-    buf.seek(0)
-    st.download_button("식단 JSON 다운로드 💾", data=buf, file_name="my_meal_plan.json", mime="application/json")
+    # JSON 문자열로 만들어서 str 타입을 직접 전달합니다 (Streamlit이 허용하는 형식).
+    export_str = json.dumps(export_obj, ensure_ascii=False, indent=2)
+    st.download_button("식단 JSON 다운로드 💾", data=export_str, file_name="my_meal_plan.json", mime="application/json")
 
 else:
     st.info("먼저 '추천 식단 생성' 버튼을 눌러 식단을 생성하십시오. 🙂")
@@ -302,4 +282,3 @@ else:
 # ---------- 하단 안내 ----------
 st.markdown("---")
 st.markdown("**배포 안내**: 이 파일을 GitHub 저장소에 올리고 Streamlit Cloud(또는 Streamlit Community Cloud)에 연결하면 바로 배포됩니다.  \n간략한 절차:  \n1) GitHub 저장소 생성 → `app.py` 업로드.  \n2) https://share.streamlit.io 에 접속 → 'New app' → GitHub repo 선택 → main 브랜치와 `app.py` 파일 선택 → Deploy.  \n3) 배포 후 공개 URL을 통해 앱 접속 가능.  \n\n원하시면 제가 배포용 README(깃허브용)와 깔끔한 README 설명을 만들어 드리겠습니다. 😊")
-
