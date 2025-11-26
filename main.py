@@ -1,143 +1,305 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
+# app.py
+# Streamlit 앱: 개인 맞춤 영양식 설계 데모
+# 외부 라이브러리 없음(표준 라이브러리 + streamlit만 사용).
+# 사용법: streamlit run app.py
 
-def run_policy_simulation():
+import streamlit as st
+import math
+import random
+import io
+import json
+from datetime import date
+
+st.set_page_config(page_title="스마트 영양식 설계사 🍽️", layout="wide")
+
+# ---------- 스타일(간단한 CSS) ----------
+st.markdown(
     """
-    Runs a simplified simulation of the KOSPI Value-Up Policy.
+    <style>
+    .big-title {font-size:32px; font-weight:700;}
+    .secondary {color: #6b7280;}
+    .card {background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); padding:16px; border-radius:12px; box-shadow: 0 4px 12px rgba(16,24,40,0.06);}
+    .muted {color:#6b7280; font-size:14px;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-    This is not an econometric forecast but an illustration of the potential
-    impact of re-rating (PBR increase) on the stock index, based on
-    a simulated fundamental growth path.
-    """
-    
-    # --- 1. SET SIMULATION PARAMETERS ---
-    
-    # Market Parameters
-    initial_kospi = 2700      # Starting KOSPI index
-    initial_pbr = 0.95        # Current average PBR ("Korea Discount")
-    target_pbr = 1.4          # Target PBR (e.g., level of Japan/Taiwan after reforms)
-    
-    # Time Parameters
-    total_years = 10          # Total simulation duration
-    policy_years = 5          # Years over which the policy effect phases in
-    steps_per_year = 12       # Monthly simulation
-    
-    # Fundamental Growth Parameters (Simulating the underlying Book Value growth)
-    # This represents the "fundamental" earnings/asset growth of the economy
-    annual_drift = 0.04       # Assumed annual growth of KOSPI's book value (e.g., 4%)
-    annual_volatility = 0.15  # Annual volatility of fundamental growth
-    
-    
-    # --- 2. CALCULATE DERIVED PARAMETERS ---
-    
-    total_steps = total_years * steps_per_year
-    policy_steps = policy_years * steps_per_year
-    
-    # Convert annual parameters to monthly
-    dt = 1 / steps_per_year
-    monthly_drift = annual_drift * dt
-    monthly_vol = annual_volatility * np.sqrt(dt)
-    
-    # Calculate the initial Book Value Per Share (BPS) of the index
-    initial_bps = initial_kospi / initial_pbr
-    
-    
-    # --- 3. SIMULATE FUNDAMENTAL GROWTH (BOOK VALUE) ---
-    
-    # We simulate the path of the underlying "Book Value" of the KOSPI.
-    # Both scenarios will share this same fundamental path.
-    # We use a Geometric Brownian Motion (GBM) for a realistic-looking path.
-    
-    bps_path = np.zeros(total_steps)
-    bps_path[0] = initial_bps
-    
-    for t in range(1, total_steps):
-        random_shock = np.random.normal(0, 1)
-        bps_path[t] = bps_path[t-1] * (1 + monthly_drift + random_shock * monthly_vol)
-        
-        
-    # --- 4. CREATE SCENARIOS ---
-    
-    # Time array for x-axis
-    time_axis = np.linspace(0, total_years, total_steps)
-    
-    # Scenario 1: Baseline (No Policy)
-    # KOSPI is just the fundamental book value multiplied by the
-    # *constant* low PBR.
-    kospi_baseline = bps_path * initial_pbr
-    
-    # Scenario 2: Policy Scenario (Value-Up)
-    # First, create the PBR path as it gradually increases
-    pbr_policy_path = np.zeros(total_steps)
-    
-    # Linearly increase PBR from initial to target over the policy period
-    pbr_increase = np.linspace(initial_pbr, target_pbr, policy_steps)
-    pbr_policy_path[:policy_steps] = pbr_increase
-    
-    # After policy period, PBR stays at the new target level
-    pbr_policy_path[policy_steps:] = target_pbr
-    
-    # KOSPI is the fundamental book value multiplied by the
-    # *changing* (re-rated) PBR.
-    kospi_policy = bps_path * pbr_policy_path
-    
-    
-    # --- 5. VISUALIZE THE RESULTS ---
-    
-    print("Running simulation...")
-    print(f"Initial KOSPI: {initial_kospi:.0f}")
-    print(f"Initial PBR: {initial_pbr:.2f}")
-    print(f"Target PBR: {target_pbr:.2f} (achieved in {policy_years} years)")
-    print(f"---")
-    print(f"KOSPI (Baseline) at Year {total_years}: {kospi_baseline[-1]:.0f}")
-    print(f"KOSPI (Policy) at Year {total_years}:   {kospi_policy[-1]:.0f}")
-    print(f"Difference: {kospi_policy[-1] - kospi_baseline[-1]:.0f} points")
+st.markdown('<div class="big-title">🍏 스마트 영양식 설계사</div>', unsafe_allow_html=True)
+st.markdown('<div class="secondary">사용자 정보와 기호를 반영한 하루 식단 추천을 제공합니다. 친절한 안내와 함께 결과를 확인하십시오. 😊</div>', unsafe_allow_html=True)
+st.write("")
 
-    plt.style.use('seaborn-v0_8-darkgrid')
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True, 
-                                   gridspec_kw={'height_ratios': [1, 3]})
-    
-    fig.suptitle('KOSPI "Value-Up" Policy Simulation (Illustrative)', fontsize=18, weight='bold')
-    
-    # Plot 1: The Policy "Shock" (PBR Change)
-    ax1.plot(time_axis, np.full(total_steps, initial_pbr), label='Baseline PBR (Discount)', 
-             linestyle='--', color='gray')
-    ax1.plot(time_axis, pbr_policy_path, label=f'Policy PBR (Re-rating to {target_pbr})', 
-             color='blue', linewidth=2.5)
-    ax1.set_title('Policy Assumption: PBR Re-rating')
-    ax1.set_ylabel('Market PBR')
-    ax1.legend(loc='lower right')
-    ax1.axvline(x=policy_years, color='red', linestyle=':', label=f'Policy Target ({policy_years} yrs)')
-    
-    # Plot 2: The Impact on KOSPI
-    ax2.plot(time_axis, kospi_baseline, label='Baseline Forecast (No Policy)', 
-             linestyle='--', color='gray', linewidth=2)
-    ax2.plot(time_axis, kospi_policy, label='Policy Scenario (Value-Up)', 
-             color='blue', linewidth=3)
-    
-    # Fill the gap between the two scenarios
-    ax2.fill_between(time_axis, kospi_baseline, kospi_policy, 
-                     where=(kospi_policy > kospi_baseline), 
-                     color='blue', alpha=0.1, label='Impact of Re-rating')
-    
-    ax2.set_title('Simulated Impact on KOSPI Index')
-    ax2.set_xlabel('Years')
-    ax2.set_ylabel('KOSPI Index Level')
-    ax2.legend(loc='upper left')
-    ax2.axvline(x=policy_years, color='red', linestyle=':', label=f'Policy Target ({policy_years} yrs)')
-    
-    # Format y-axis to have commas
-    ax2.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: format(int(x), ',')))
-    
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    
-    # Save the figure
-    plt.savefig("kospi_value_up_simulation.png", dpi=150)
-    print("\nGraph saved as 'kospi_value_up_simulation.png'")
-    
-    # Show the plot
-    plt.show()
+# ---------- 헬퍼 함수 ----------
+def calc_bmr(sex, weight_kg, height_cm, age):
+    # Mifflin-St Jeor
+    if sex == "남성":
+        return 10 * weight_kg + 6.25 * height_cm - 5 * age + 5
+    else:
+        return 10 * weight_kg + 6.25 * height_cm - 5 * age - 161
 
-if __name__ == "__main__":
-    run_policy_simulation()
+def activity_multiplier(level):
+    mapping = {
+        "거의 활동 없음": 1.2,
+        "가벼운 활동 (주 1-3회)": 1.375,
+        "보통 활동 (주 3-5회)": 1.55,
+        "높은 활동 (주 6-7회)": 1.725,
+        "매우 높은 활동 (육체노동 등)": 1.9
+    }
+    return mapping.get(level, 1.2)
+
+def calorie_target(tdee, goal):
+    if goal == "체중 감량":
+        return int(tdee * 0.82)  # -18% 감량(데모용 안전수치)
+    elif goal == "체중 증가":
+        return int(tdee * 1.12)  # +12% 증가
+    else:
+        return int(tdee)
+
+def macro_targets(calories, protein_pref="보통"):
+    # 단백질 목표: 체중(kg) * factor (1.2~2.0) depending preference
+    # 탄수화물: 나머지 열량에서 지방(25%)과 단백질(4kcal/g) 제외
+    # 지방: 총열량의 25% (대략)
+    fat_cal = calories * 0.25
+    fat_g = int(fat_cal / 9)
+    if protein_pref == "높게":
+        prot_g = int(user_weight_kg * 1.8)
+    elif protein_pref == "낮게":
+        prot_g = int(user_weight_kg * 1.0)
+    else:
+        prot_g = int(user_weight_kg * 1.4)
+    prot_cal = prot_g * 4
+    carb_cal = max(0, calories - prot_cal - fat_cal)
+    carb_g = int(carb_cal / 4)
+    return {"calories": calories, "protein_g": prot_g, "carb_g": carb_g, "fat_g": fat_g}
+
+def score_recipe_for_user(recipe, prefs):
+    # 높은 점수: 선호 포함, 알레르기 제외, 비선호 제외, 비타민 채움 고려
+    score = 0
+    # 선호 음식 포함시 보너스
+    for p in prefs["likes"]:
+        if p and p.lower() in recipe["name"].lower():
+            score += 15
+    # 알레르기/싫어함 있으면 큰 패널티
+    for a in prefs["allergies"]:
+        if a and a.lower() in recipe["ingredients_text"].lower():
+            return -999  # 완전 제외
+    for d in prefs["dislikes"]:
+        if d and d.lower() in recipe["ingredients_text"].lower():
+            score -= 20
+    # 비타민 포함 여부
+    for vit in prefs["vitamins_wanted"]:
+        if vit in recipe["vitamins"]:
+            score += 5
+    # 칼로리 적합성(너무 크면 감점)
+    if recipe["calories"] <= prefs["calories_per_meal"] * 1.2:
+        score += 8
+    # 랜덤 소량 가산으로 다양성
+    score += random.uniform(0,4)
+    return score
+
+def pick_meals_for_day(recipes_db, prefs):
+    # 세 끼 + 1-2 간식을 추천 (간단한 탐색: greedy)
+    chosen = {"아침": None, "점심": None, "저녁": None, "간식": []}
+    remaining_cal = prefs["daily_calories"]
+    # 각 끼 당 목표칼로리(비율)
+    distribution = {"아침": 0.25, "점심": 0.35, "저녁": 0.30}
+    for meal, frac in distribution.items():
+        prefs["calories_per_meal"] = int(prefs["daily_calories"] * frac)
+        # 후보 필터링
+        candidates = []
+        for r in recipes_db:
+            s = score_recipe_for_user(r, prefs)
+            if s > -100:
+                candidates.append((s, r))
+        if not candidates:
+            chosen[meal] = None
+            continue
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        # 상위 후보 중 하나 선택(다양성 위해 약간 무작위)
+        top_candidates = [c for c in candidates if c[0] >= candidates[0][0] - 6]
+        sel = random.choice(top_candidates)[1]
+        chosen[meal] = sel
+        remaining_cal -= sel["calories"]
+    # 간식: 남은 칼로리에서 한두개 고르기
+    snack_pool = [r for r in recipes_db if r["type"] == "간식"]
+    snacks = []
+    snack_budget = max(150, int(prefs["daily_calories"] * 0.10))
+    random.shuffle(snack_pool)
+    for s in snack_pool:
+        if s["calories"] <= snack_budget:
+            snacks.append(s)
+            snack_budget -= s["calories"]
+        if len(snacks) >= 2 or snack_budget <= 100:
+            break
+    chosen["간식"] = snacks
+    return chosen
+
+# ---------- 간단한 '레시피 데이터베이스' (데모용) ----------
+# 각 항목은 name, type, calories, protein_g, carb_g, fat_g, vitamins(list), ingredients_text
+RECIPES = [
+    {"name":"그릭 요거트 볼 (과일, 견과)", "type":"아침", "calories":380, "protein_g":20, "carb_g":45, "fat_g":12,
+     "vitamins":["B","C"], "ingredients_text":"요거트, 블루베리, 바나나, 아몬드, 꿀"},
+    {"name":"오트밀(우유) & 바나나", "type":"아침", "calories":330, "protein_g":12, "carb_g":55, "fat_g":6,
+     "vitamins":["B"], "ingredients_text":"오트, 우유, 바나나, 시나몬"},
+    {"name":"현미 비빔밥(닭가슴살 토핑)", "type":"점심", "calories":650, "protein_g":35, "carb_g":85, "fat_g":15,
+     "vitamins":["A","C","B"], "ingredients_text":"현미, 닭가슴살, 야채, 고추장(약간)"},
+    {"name":"연어 샐러드 & 통곡물빵", "type":"점심", "calories":540, "protein_g":30, "carb_g":42, "fat_g":22,
+     "vitamins":["D","B"], "ingredients_text":"연어, 샐러드채소, 올리브오일, 통곡물빵"},
+    {"name":"닭가슴살 스테이크 & 구운야채", "type":"저녁", "calories":620, "protein_g":45, "carb_g":30, "fat_g":28,
+     "vitamins":["B"], "ingredients_text":"닭가슴살, 브로콜리, 당근, 올리브오일"},
+    {"name":"두부야채 볶음밥(적당량)", "type":"저녁", "calories":580, "protein_g":25, "carb_g":78, "fat_g":16,
+     "vitamins":["A","C"], "ingredients_text":"두부, 채소, 현미밥, 간장"},
+    {"name":"아몬드 한줌 + 사과", "type":"간식", "calories":220, "protein_g":6, "carb_g":20, "fat_g":14,
+     "vitamins":["E","C"], "ingredients_text":"아몬드, 사과"},
+    {"name":"단백질 쉐이크 (우유기반)", "type":"간식", "calories":240, "protein_g":25, "carb_g":18, "fat_g":6,
+     "vitamins":["B"], "ingredients_text":"단백질파우더, 우유, 바나나"},
+    {"name":"당근 스틱 + 후무스", "type":"간식", "calories":180, "protein_g":5, "carb_g":20, "fat_g":8,
+     "vitamins":["A","C"], "ingredients_text":"당근, 후무스(병아리콩)"},
+    {"name":"바나나 팬케이크 (통밀)", "type":"아침", "calories":400, "protein_g":14, "carb_g":60, "fat_g":10,
+     "vitamins":["B"], "ingredients_text":"통밀가루, 바나나, 계란, 우유"},
+]
+
+# ---------- 사용자 입력 UI ----------
+with st.container():
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.header("1) 기본 정보 입력")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        user_name = st.text_input("이름 (선택)", value="")
+        today = date.today().isoformat()
+        age = st.number_input("나이", value=25, min_value=10, max_value=100, step=1)
+        sex = st.selectbox("성별", ("남성", "여성"))
+    with col2:
+        user_height_cm = st.number_input("키 (cm)", value=170, min_value=100, max_value=230, step=1)
+        user_weight_kg = st.number_input("몸무게 (kg)", value=65.0, min_value=30.0, max_value=200.0, step=0.1)
+        activity = st.selectbox("활동 수준", ("거의 활동 없음", "가벼운 활동 (주 1-3회)", "보통 활동 (주 3-5회)", "높은 활동 (주 6-7회)", "매우 높은 활동 (육체노동 등)"))
+    with col3:
+        goal = st.selectbox("목표", ("체중 유지", "체중 감량", "체중 증가"))
+        protein_pref = st.selectbox("단백질 선호량", ("보통", "높게", "낮게"))
+        veg_pref = st.multiselect("선호 음식(예시) - 기호에 맞춰 선택", ["해산물","닭고기","소고기","채소","견과류","과일","유제품","통곡물"], default=["채소","통곡물"])
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with st.container():
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.header("2) 식습관 / 제약 입력")
+    col1, col2 = st.columns(2)
+    with col1:
+        allergies = st.text_input("알레르기(쉼표로 구분, 예: 땅콩, 우유) - 비어있어도 됨", value="")
+        dislikes_text = st.text_input("싫어하는 음식(쉼표로 구분, 예: 굴, 버섯)")
+    with col2:
+        vit_wanted = st.multiselect("특히 챙기고 싶은 영양(선택)", ["A","B","C","D","E","칼슘","철분"], default=["B","C"])
+        meal_style = st.selectbox("끼니 스타일 선호", ("가벼운 식사", "포만감 있는 식사", "단백질 중심", "채소 중심"))
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# parse lists
+likes = veg_pref
+allergies_list = [x.strip() for x in allergies.split(",") if x.strip()]
+dislikes_list = [x.strip() for x in dislikes_text.split(",") if x.strip()]
+
+# ---------- 계산 ----------
+user_bmr = calc_bmr(sex, user_weight_kg, user_height_cm, age)
+tdee = int(user_bmr * activity_multiplier(activity))
+daily_cal = calorie_target(tdee, goal)
+macros = macro_targets(daily_cal, protein_pref)
+
+# Sidebar summary
+with st.sidebar:
+    st.markdown("### 요약")
+    st.write(f"추정 BMR: **{int(user_bmr):,} kcal**")
+    st.write(f"TDEE(활동 반영): **{tdee:,} kcal**")
+    st.write(f"추천 칼로리 (목표 반영): **{daily_cal:,} kcal**")
+    st.write(f"단백질 목표: **{macros['protein_g']} g**")
+    st.write(f"탄수화물 목표: **{macros['carb_g']} g**")
+    st.write(f"지방 목표: **{macros['fat_g']} g**")
+    st.write("---")
+    st.write("기호 및 제약:")
+    st.write(f"- 선호: {', '.join(likes) if likes else '없음'}")
+    st.write(f"- 알레르기: {', '.join(allergies_list) if allergies_list else '없음'}")
+    st.write(f"- 싫어함: {', '.join(dislikes_list) if dislikes_list else '없음'}")
+
+# ---------- 추천 생성 ----------
+prefs = {
+    "likes": [l.lower() for l in likes],
+    "allergies": [a.lower() for a in allergies_list],
+    "dislikes": [d.lower() for d in dislikes_list],
+    "vitamins_wanted": vit_wanted,
+    "daily_calories": daily_cal,
+    "calories_per_meal": int(daily_cal * 0.3),  # temp, will be set in pick_meals
+}
+
+st.header("3) 맞춤 식단 추천 👩‍⚕️🍽️")
+st.markdown("아래 버튼을 눌러 사용자의 정보에 맞춘 하루 권장 식단을 생성하십시오.")
+
+if st.button("추천 식단 생성 🔍"):
+    plan = pick_meals_for_day(RECIPES, prefs)
+    st.session_state["last_plan"] = plan
+    st.success("추천 식단이 생성되었습니다. 아래를 확인하십시오. ✅")
+
+# Show if exists
+plan = st.session_state.get("last_plan", None)
+if plan:
+    col_a, col_b = st.columns([2,1])
+    with col_a:
+        for meal in ["아침","점심","저녁"]:
+            st.subheader(f"🟢 {meal}")
+            item = plan.get(meal)
+            if item:
+                st.markdown(f"**{item['name']}**  — {item['calories']} kcal  | 단백질 {item['protein_g']} g  | 탄수 {item['carb_g']} g  | 지방 {item['fat_g']} g")
+                st.markdown(f"_주요 재료_: {item['ingredients_text']}")
+                if item.get("vitamins"):
+                    st.caption("함유 영양: " + ", ".join(item["vitamins"]))
+            else:
+                st.info(f"{meal}에 적합한 추천을 찾지 못했습니다.")
+        st.subheader("🟡 간식")
+        snacks = plan.get("간식", [])
+        if snacks:
+            for s in snacks:
+                st.markdown(f"- {s['name']} ({s['calories']} kcal)")
+        else:
+            st.info("추천 간식이 없습니다.")
+    with col_b:
+        st.markdown("### 오늘 목표와의 차이")
+        # Sum macros
+        tot_cals = 0; tot_prot=0; tot_carb=0; tot_fat=0
+        for m in ["아침","점심","저녁"]:
+            it = plan.get(m)
+            if it:
+                tot_cals += it["calories"]; tot_prot += it["protein_g"]; tot_carb += it["carb_g"]; tot_fat += it["fat_g"]
+        for s in plan.get("간식", []):
+            tot_cals += s["calories"]; tot_prot += s["protein_g"]; tot_carb += s["carb_g"]; tot_fat += s["fat_g"]
+        st.metric("추천된 총 칼로리", f"{tot_cals:,} kcal", delta=f"{tot_cals - daily_cal:+,} kcal")
+        st.metric("단백질 (g)", f"{tot_prot} g", delta=f"{tot_prot - macros['protein_g']:+} g")
+        st.metric("탄수화물 (g)", f"{tot_carb} g", delta=f"{tot_carb - macros['carb_g']:+} g")
+        st.metric("지방 (g)", f"{tot_fat} g", delta=f"{tot_fat - macros['fat_g']:+} g")
+        # Progress bars
+        st.write("진행률(목표 대비)")
+        st.progress(min(1.0, tot_prot / max(1, macros['protein_g'])))
+        st.progress(min(1.0, tot_carb / max(1, macros['carb_g'])))
+        st.progress(min(1.0, tot_fat / max(1, macros['fat_g'])))
+        st.write("---")
+        st.markdown("#### 조언")
+        if tot_prot < macros["protein_g"]:
+            st.info("단백질이 부족합니다. 간식으로 단백질 쉐이크나 두부, 견과를 추가하십시오. 🥛")
+        if tot_carb < macros["carb_g"]:
+            st.info("탄수화물도 약간 부족합니다. 통곡물 빵 또는 감자류를 추가 권장합니다. 🍠")
+        if tot_fat < macros["fat_g"]:
+            st.info("건강한 지방(아보카도, 견과, 올리브유)를 소량 추가하면 균형이 좋아집니다. 🥑")
+
+    # 다운로드(텍스트)
+    export_text = {
+        "user": {"name": user_name, "age": age, "height_cm": user_height_cm, "weight_kg": user_weight_kg, "goal": goal},
+        "daily_targets": macros,
+        "plan": plan
+    }
+    buf = io.StringIO()
+    buf.write(json.dumps(export_text, ensure_ascii=False, indent=2))
+    buf.seek(0)
+    st.download_button("식단 JSON 다운로드 💾", data=buf, file_name="my_meal_plan.json", mime="application/json")
+
+else:
+    st.info("먼저 '추천 식단 생성' 버튼을 눌러 식단을 생성하십시오. 🙂")
+
+# ---------- 하단 안내 ----------
+st.markdown("---")
+st.markdown("**배포 안내**: 이 파일을 GitHub 저장소에 올리고 Streamlit Cloud(또는 Streamlit Community Cloud)에 연결하면 바로 배포됩니다.  \n간략한 절차:  \n1) GitHub 저장소 생성 → `app.py` 업로드.  \n2) https://share.streamlit.io 에 접속 → 'New app' → GitHub repo 선택 → main 브랜치와 `app.py` 파일 선택 → Deploy.  \n3) 배포 후 공개 URL을 통해 앱 접속 가능.  \n\n원하시면 제가 배포용 README(깃허브용)와 깔끔한 README 설명을 만들어 드리겠습니다. 😊")
+
