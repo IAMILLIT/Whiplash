@@ -1,0 +1,42 @@
+def analyze_nutrition(user):
+    # 하루 권장 칼로리 계산 (단순화 버전)
+    base = 10 * user["weight"] + 6.25 * user["height"] - 5 * user["age"]
+
+    if user["activity"] == "낮음":
+        cal = base * 1.2
+    elif user["activity"] == "보통":
+        cal = base * 1.375
+    else:
+        cal = base * 1.55
+
+    mood_effect = {
+        "스트레스 많음": "탄수화물 섭취 증가 필요",
+        "우울": "오메가3 포함 음식 필요",
+        "기력 없음": "단백질·철분 필요",
+        "기분 좋음": "일반 식단 유지 가능",
+        "평범": "균형 잡힌 식단 추천",
+    }
+
+    return {
+        "권장 칼로리": round(cal),
+        "기분 기반 분석": mood_effect[user["mood"]],
+    }
+
+
+def recommend_meals(user, nutrition):
+    rec = []
+
+    if "한식" in user["preference"]:
+        rec.append("현미밥 + 연어구이 + 시금치무침")
+    if "일식" in user["preference"]:
+        rec.append("연어 사시미 + 미소된장국")
+    if "간편식" in user["preference"]:
+        rec.append("닭가슴살 도시락 + 샐러드")
+
+    # 알레르기 제거
+    filtered = []
+    for meal in rec:
+        if not any(allergy in meal for allergy in user["dislike"]):
+            filtered.append(meal)
+
+    return filtered
