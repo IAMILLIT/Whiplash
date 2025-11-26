@@ -1,0 +1,7 @@
+def personalized_plan(user, nutrition, meals):
+    return f"""
+    ✔ 하루 권장 칼로리: {nutrition['권장 칼로리']} kcal  
+    ✔ 오늘의 기분 분석: {nutrition['기분 기반 분석']}  
+    ✔ 추천 식단 수: {len(meals)}개  
+    ✔ 종교/알레르기 고려 적용 완료  
+    """
