@@ -1,0 +1,12 @@
+/healicious
+ ├── main.py
+ ├── modules
+ │    ├── user_profile.py
+ │    ├── nutrition.py
+ │    ├── recommendation.py
+ │    ├── restaurant_ads.py
+ │    └── utils.py
+ └── data
+      ├── menu_database.csv
+      ├── restaurant_list.csv
+      └── ads.csv
