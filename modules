@@ -1,0 +1,28 @@
+import streamlit as st
+
+def get_user_profile():
+    st.subheader("사용자 기본 정보 입력")
+
+    age = st.number_input("나이", min_value=1, max_value=120)
+    weight = st.number_input("몸무게 (kg)", min_value=1.0)
+    height = st.number_input("키 (cm)", min_value=50.0)
+    activity = st.selectbox("활동량", ["낮음", "보통", "높음"])
+    preference = st.multiselect("선호 음식", ["한식", "일식", "중식", "양식", "채식", "간편식"])
+    dislike = st.multiselect("비선호·알레르기 음식", ["우유", "해조류", "갑각류", "땅콩", "밀", "계란"])
+
+    religion = st.selectbox("종교적 이유로 못 먹는 음식이 있습니까?", ["없음", "채식주의", "이슬람 식단", "힌두교"])
+    mood = st.selectbox("오늘의 기분 상태", ["평범", "스트레스 많음", "우울", "기력 없음", "기분 좋음"])
+
+    if not preference:
+        return None
+
+    return {
+        "age": age,
+        "weight": weight,
+        "height": height,
+        "activity": activity,
+        "preference": preference,
+        "dislike": dislike,
+        "religion": religion,
+        "mood": mood,
+    }
